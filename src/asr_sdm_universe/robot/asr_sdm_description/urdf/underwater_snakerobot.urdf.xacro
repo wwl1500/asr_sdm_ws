@@ -7,104 +7,159 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="underwater_snakerobot_description">
 <!--................................. Definition ...................................-->
-  <xacro:property name="pi" value="3.141592654" />
   <xacro:property name="robot_parts_path" value="package://asr_sdm_description/meshes" />
+  <!-- 模块间距，对齐控制器段长（论文 L≈0.18 m） -->
+  <xacro:property name="module_spacing" value="0.18" />
+  <xacro:property name="body_mass" value="4" />
+  <xacro:property name="body_inertia" value="0.2" />
+  <xacro:property name="screw_mass" value="0.5" />
+  <xacro:property name="screw_inertia" value="0.01" />
+  <xacro:property name="num_segments" value="4" />
 
 <!---............................. Link Definitions ................................-->
+  <link name="world">
+  </link>
+
   <link name="base_link">
     <inertial>
-      <mass value="4" />
-      <inertia ixx="4"  ixy="0"  ixz="0" iyy="4" iyz="0" izz="0.0144" />
+      <mass value="${body_mass}" />
+      <inertia ixx="${body_inertia}"  ixy="0"  ixz="0" iyy="${body_inertia}" iyz="0" izz="${body_inertia}" />
     </inertial>
     <visual>
-      <origin rpy="${pi} 0 ${-pi/2}" xyz="0.0 0.0 0.0"/>
+      <!-- 让主体沿 x 轴躺平，视觉上更像蛇形串联 -->
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.0 0.0"/>
       <geometry>
-        <mesh filename="${robot_parts_path}/body_2links_head-blender.obj"/>
+        <!-- 用简单圆柱突出细长蛇形外观，避免网格朝向不一致 -->
+        <cylinder length="0.18" radius="0.04"/>
       </geometry>
     </visual>
   </link>
 
   <link name="screw_1_left">
-    <visual>
-      <origin rpy="${-pi} 0 ${pi/2}" xyz="0.0 0.0 0.0"/>
-      <geometry>
-        <mesh filename="${robot_parts_path}/screw_left_CFD-blender.obj"/>
-      </geometry>
-    </visual>
-  </link>
-  <link name="screw_1_right">
-    <visual>
-      <origin rpy="0 ${pi/2*3} 0" xyz="-0.0 0.0 0.0"/>
-      <geometry>
-        <mesh filename="${robot_parts_path}/screw_right_CFD.dae"/>
-      </geometry>
-    </visual>
-  </link>
-
-  <link name="link_2">
     <inertial>
-      <mass value="4" />
-      <inertia ixx="4"  ixy="0"  ixz="0" iyy="4" iyz="0" izz="0.0144" />
+      <mass value="${screw_mass}" />
+      <inertia ixx="${screw_inertia}"  ixy="0"  ixz="0" iyy="${screw_inertia}" iyz="0" izz="${screw_inertia}" />
     </inertial>
-    <visual>
-      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
-      <geometry>
-        <mesh filename="${robot_parts_path}/body_2links.dae"/>
-      </geometry>
-    </visual>
-  </link>
-
-  <link name="screw_2_left" >
     <visual>
       <origin rpy="0 ${pi/2*3} 0" xyz="0.0 0.0 0.0"/>
       <geometry>
+        <!-- 使用仓库中已有且 RViz 支持良好的 Collada 网格 -->
         <mesh filename="${robot_parts_path}/screw_left_CFD.dae"/>
       </geometry>
     </visual>
   </link>
-  <link name="screw_2_right">
+  <link name="screw_1_right">
+    <inertial>
+      <mass value="${screw_mass}" />
+      <inertia ixx="${screw_inertia}"  ixy="0"  ixz="0" iyy="${screw_inertia}" iyz="0" izz="${screw_inertia}" />
+    </inertial>
     <visual>
-      <origin rpy="0 ${-pi/2} 0" xyz="-0.0 0.0 0.0"/>
+      <origin rpy="0 ${pi/2} 0" xyz="-0.0 0.0 0.0"/>
       <geometry>
         <mesh filename="${robot_parts_path}/screw_right_CFD.dae"/>
       </geometry>
     </visual>
   </link>
-<!--...........................Joint Definitions.....................................-->
+
+  <xacro:macro name="snake_segment" params="index parent_link">
+    <link name="link_${index}">
+      <inertial>
+        <mass value="${body_mass}" />
+        <inertia ixx="${body_inertia}"  ixy="0"  ixz="0" iyy="${body_inertia}" iyz="0" izz="${body_inertia}" />
+      </inertial>
+      <visual>
+        <!-- 与基座一致，将网格绕 y 轴旋转 90 度使其沿 x 轴展开 -->
+        <origin rpy="0 ${pi/2} 0" xyz="0.0 0.0 0.0"/>
+        <geometry>
+          <cylinder length="0.18" radius="0.04"/>
+        </geometry>
+      </visual>
+    </link>
+
+    <link name="screw_${index}_left">
+      <inertial>
+        <mass value="${screw_mass}" />
+        <inertia ixx="${screw_inertia}"  ixy="0"  ixz="0" iyy="${screw_inertia}" iyz="0" izz="${screw_inertia}" />
+      </inertial>
+      <visual>
+        <origin rpy="0 ${pi/2*3} 0" xyz="0.0 0.0 0.0"/>
+        <geometry>
+          <mesh filename="${robot_parts_path}/screw_left_CFD.dae"/>
+        </geometry>
+      </visual>
+    </link>
+
+    <link name="screw_${index}_right">
+      <inertial>
+        <mass value="${screw_mass}" />
+        <inertia ixx="${screw_inertia}"  ixy="0"  ixz="0" iyy="${screw_inertia}" iyz="0" izz="${screw_inertia}" />
+      </inertial>
+      <visual>
+        <origin rpy="0 ${-pi/2} 0" xyz="-0.0 0.0 0.0"/>
+        <geometry>
+          <mesh filename="${robot_parts_path}/screw_right_CFD.dae"/>
+        </geometry>
+      </visual>
+    </link>
+
+    <joint name="${parent_link}_to_link_${index}" type="continuous">
+      <parent link="${parent_link}"/>
+      <child link="link_${index}"/>
+      <!-- 将段间偏移改为 x 方向，便于在平面内看到弯曲 -->
+      <origin rpy="0 0 0" xyz="${module_spacing} 0 0"/>
+      <!-- 改为绕 z 轴转动，使身体在水平面内左右弯曲 -->
+      <axis xyz="0 0 1"/>
+      <limit effort="100.0" lower="-1.0" upper="1.0" velocity="10.0"/>
+      <safety_controller k_velocity="20" k_position="20"/>
+    </joint>
+
+    <joint name="link_${index}_to_screw_${index}_left_joint" type="continuous">
+      <parent link="link_${index}"/>
+      <child link="screw_${index}_left"/>
+      <!-- 将螺旋桨贴到圆柱侧面 (+y) -->
+      <origin rpy="0 ${pi/2*3} 0" xyz="0 0.05 0.0"/>
+      <limit effort="1000.0" lower="-3.14159" upper="3.14159" velocity="10.0"/>
+      <safety_controller k_velocity="5" k_position="5"/>
+    </joint>
+
+    <joint name="link_${index}_to_screw_${index}_right_joint" type="continuous">
+      <parent link="link_${index}"/>
+      <child link="screw_${index}_right"/>
+      <!-- 将螺旋桨贴到圆柱侧面 (-y) -->
+      <origin rpy="0 ${pi/2} 0" xyz="0 -0.05 0.0"/>
+      <limit effort="1000.0" lower="-3.14159" upper="3.14159" velocity="10.0"/>
+      <safety_controller k_velocity="5" k_position="5"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="snake_chain" params="index max_index parent_link">
+    <xacro:if value="${index &lt;= max_index}">
+      <xacro:snake_segment index="${index}" parent_link="${parent_link}"/>
+      <xacro:snake_chain index="${index + 1}" max_index="${max_index}" parent_link="link_${index}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:snake_chain index="2" max_index="${num_segments + 1}" parent_link="base_link"/>
+<!--...........................Base joints............................................-->
+  <joint name="world_to_base_link" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+  </joint>
+
   <joint name="base_link_to_screw_1_left_joint" type="continuous">
     <parent link="base_link"/>
     <child link="screw_1_left"/>
-    <origin rpy="0 ${pi} 0" xyz="0.181 0 0"/>
+    <!-- 将螺旋桨贴到圆柱侧面 (+y) -->
+    <origin rpy="0 ${pi/2*3} 0" xyz="0 0.05 0.0"/>
     <limit effort="1000.0" lower="-3.14159" upper="3.14159" velocity="10.0"/>
-    <safety_controller k_velocity="10" k_position="5"/>
+    <safety_controller k_velocity="5" k_position="5"/>
   </joint>
   <joint name="base_link_to_screw_1_right_joint" type="continuous">
     <parent link="base_link"/>
     <child link="screw_1_right"/>
-    <origin rpy="0 0 0" xyz="0.117 0 0"/>
-    <limit effort="1000.0" lower="-3.14159" upper="3.14159" velocity="10.0"/>
-    <safety_controller k_velocity="10" k_position="5"/>
-  </joint>
-
-  <joint name="base_link_to_link_2" type="continuous">
-    <parent link="base_link"/>
-    <child link="link_2"/>
-    <origin rpy="0 -${pi/2} 0" xyz="0 0 0.0"/>
-    <limit effort="100.0" lower="-1.0" upper="1.0" velocity="10.0"/>
-    <safety_controller k_velocity="20" k_position="20"/>
-  </joint>
-
-  <joint name="link_2_to_screw_2_left_joint" type="continuous">
-    <parent link="link_2"/>
-    <child link="screw_2_left"/>
-    <origin rpy="0 ${pi/2*3} 0" xyz="0 0 0.117"/>
-    <limit effort="1000.0" lower="-3.14159" upper="3.14159" velocity="10.0"/>
-    <safety_controller k_velocity="5" k_position="5"/>
-  </joint>
-  <joint name="link_2_to_screw_2_right_joint" type="continuous">
-    <parent link="link_2"/>
-    <child link="screw_2_right"/>
-    <origin rpy="0 ${pi/2} 0" xyz="0 0 0.181"/>
+    <!-- 将螺旋桨贴到圆柱侧面 (-y) -->
+    <origin rpy="0 ${pi/2} 0" xyz="0 -0.05 0.0"/>
     <limit effort="1000.0" lower="-3.14159" upper="3.14159" velocity="10.0"/>
     <safety_controller k_velocity="5" k_position="5"/>
   </joint>

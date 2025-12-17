@@ -50,14 +50,16 @@ target_include_directories(front_unit_following_controller PUBLIC
 
 # Build main executable
 add_executable(asr_sdm_controller src/asr_sdm_controller_node.cpp)
+ament_target_dependencies(asr_sdm_controller
+  rclcpp
+  std_msgs
+  geometry_msgs
+  sensor_msgs
+  asr_sdm_control_msgs
+  asr_sdm_hardware_msgs
+)
 target_link_libraries(asr_sdm_controller
   front_unit_following_controller
-  rclcpp::rclcpp
-  ${std_msgs_TARGETS}
-  ${geometry_msgs_TARGETS}
-  ${sensor_msgs_TARGETS}
-  ${asr_sdm_control_msgs_TARGETS}
-  ${asr_sdm_hardware_msgs_TARGETS}
 )
 
 install(TARGETS
@@ -85,11 +87,11 @@ if(BUILD_TESTING)
   
   # Add unit tests
   ament_add_gtest(test_front_unit_following_controller
-    src/test_front_unit_following_controller.cpp
+    test_front_unit_following_controller.cpp
   )
   if(TARGET test_front_unit_following_controller)
     target_include_directories(test_front_unit_following_controller PUBLIC
-      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../include>
     )
     target_link_libraries(test_front_unit_following_controller
       front_unit_following_controller
