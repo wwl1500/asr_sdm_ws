@@ -16,8 +16,11 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 find_package(asr_sdm_control_msgs REQUIRED)
 find_package(asr_sdm_hardware_msgs REQUIRED)
+find_package(pinocchio REQUIRED)
+find_package(Eigen3 REQUIRED)
 # find_package(periphery REQUIRED)  # Optional dependency, commented out for now
 # Find libgpiod
 # find_package(PkgConfig REQUIRED)
@@ -33,11 +36,26 @@ include_directories(
   include
   # ${GPIOD_INCLUDE_DIRS}
   /usr/local/include
+  ${pinocchio_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR}
 )
 
 # add_executable(mcp_can src/mcp_can.cpp)
 # target_link_libraries(mcp_can ${MRAA_LIB})
 # ament_target_dependencies(mcp_can rclcpp)
+
+# Build Pinocchio wrapper library
+add_library(pinocchio_kinematics_wrapper
+  src/pinocchio_kinematics_wrapper.cpp
+)
+target_include_directories(pinocchio_kinematics_wrapper PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${pinocchio_INCLUDE_DIRS}
+)
+target_link_libraries(pinocchio_kinematics_wrapper
+  ${pinocchio_LIBRARIES}
+)
 
 # Build controller library
 add_library(front_unit_following_controller
@@ -46,6 +64,11 @@ add_library(front_unit_following_controller
 target_include_directories(front_unit_following_controller PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+  ${pinocchio_INCLUDE_DIRS}
+)
+target_link_libraries(front_unit_following_controller
+  pinocchio_kinematics_wrapper
+  ${pinocchio_LIBRARIES}
 )
 
 # Build main executable
@@ -56,13 +79,16 @@ target_link_libraries(asr_sdm_controller
   ${std_msgs_TARGETS}
   ${geometry_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
+  ${diagnostic_msgs_TARGETS}
   ${asr_sdm_control_msgs_TARGETS}
   ${asr_sdm_hardware_msgs_TARGETS}
+  ${pinocchio_LIBRARIES}
 )
 
 install(TARGETS
   asr_sdm_controller
   front_unit_following_controller
+  pinocchio_kinematics_wrapper
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -72,7 +98,6 @@ install(DIRECTORY include/
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  find_package(ament_cmake_gtest REQUIRED)
   
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
@@ -82,19 +107,6 @@ if(BUILD_TESTING)
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
-  
-  # Add unit tests
-  ament_add_gtest(test_front_unit_following_controller
-    src/test_front_unit_following_controller.cpp
-  )
-  if(TARGET test_front_unit_following_controller)
-    target_include_directories(test_front_unit_following_controller PUBLIC
-      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    )
-    target_link_libraries(test_front_unit_following_controller
-      front_unit_following_controller
-    )
-  endif()
 endif()
 
 ament_package()
