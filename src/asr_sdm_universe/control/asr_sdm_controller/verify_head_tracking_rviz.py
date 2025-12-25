@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-RViz 头部跟踪算法验证脚本
+RViz 水平面头部跟踪算法验证脚本
 
-这个脚本会发布不同的头部运动命令，让你在 RViz 中观察机器人身体的跟随效果。
+这个脚本会发布不同的头部运动命令，让你在 RViz 中观察机器人在水平面上的跟随效果。
+link_5 作为头部单元，在水平面（XY平面）上运动。
 
 使用方法：
 1. 确保 RViz 和控制器都在运行
@@ -57,16 +58,17 @@ class HeadTrackingVerifier(Node):
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
         
         self.get_logger().info('=' * 60)
-        self.get_logger().info('头部跟踪算法验证脚本已启动')
+        self.get_logger().info('水平面头部跟踪算法验证脚本已启动')
+        self.get_logger().info('link_5 作为头部单元在水平面（XY平面）运动')
         self.get_logger().info('=' * 60)
         self.get_logger().info('')
         self.get_logger().info('验证场景：')
         self.get_logger().info('  1. 圆形轨迹跟踪 (0-15秒)')
         self.get_logger().info('  2. 直线运动 (15-25秒)')
-        self.get_logger().info('  3. S形轨迹 (25-40秒)')
-        self.get_logger().info('  4. 停止 (40秒后)')
+        self.get_logger().info('  3. S形轨迹 (25-55秒)')
+        self.get_logger().info('  4. 停止 (55秒后)')
         self.get_logger().info('')
-        self.get_logger().info('请在 RViz 中观察机器人身体的运动！')
+        self.get_logger().info('请在 RViz 中观察机器人在水平面上的运动！')
         self.get_logger().info('=' * 60)
     
     def publish_joint_state(self):
@@ -76,36 +78,18 @@ class HeadTrackingVerifier(Node):
         joint_state.header.frame_id = 'base_link'
         
         # 主体关节（会随控制算法更新）
-        main_joint_names = [
+        # 注意：螺旋桨关节是 fixed 类型，由 robot_state_publisher 自动处理
+        joint_names = [
             'base_link_to_link_2',
             'link_2_to_link_3',
             'link_3_to_link_4',
             'link_4_to_link_5'
         ]
 
-        # 螺旋桨关节（保持为 0，用于补全 TF）
-        screw_joint_names = [
-            'base_link_to_screw_1_left_joint',
-            'base_link_to_screw_1_right_joint',
-            'link_2_to_screw_2_left_joint',
-            'link_2_to_screw_2_right_joint',
-            'link_3_to_screw_3_left_joint',
-            'link_3_to_screw_3_right_joint',
-            'link_4_to_screw_4_left_joint',
-            'link_4_to_screw_4_right_joint',
-            'link_5_to_screw_5_left_joint',
-            'link_5_to_screw_5_right_joint',
-        ]
-
-        joint_names = main_joint_names + screw_joint_names
-
-        # 主体关节使用当前角度，螺旋桨关节填 0
+        # 发布主体关节状态
         for i, name in enumerate(joint_names):
             joint_state.name.append(name)
-            if i < len(self.joint_angles):
-                joint_state.position.append(self.joint_angles[i])
-            else:
-                joint_state.position.append(0.0)
+            joint_state.position.append(self.joint_angles[i])
             joint_state.velocity.append(0.0)
             joint_state.effort.append(0.0)
         
@@ -122,49 +106,111 @@ class HeadTrackingVerifier(Node):
     
     def update_joint_angles(self, v1, omega1):
         """
-        根据控制算法更新关节角度（简化版本）
-        实际应该从控制命令中获取，这里用公式近似
+        根据头部角速度更新关节角度
+        
+        蛇形机器人的身体跟随原理：
+        - 当头部转弯时，身体各段应该跟随头部的轨迹
+        - 关节角度应该使身体弯向转弯方向
+        - 使用简化的跟随模型：关节角度与头部角速度成正比
         """
-        L = 0.18  # 段长度
         dt = 0.1  # 时间步长
         
-        # 第一个关节的角速度（根据论文公式）
-        if len(self.joint_angles) > 0:
-            phi1 = self.joint_angles[0]
-            phi_dot1 = -(2.0 / L) * v1 * math.sin(phi1) - omega1 * (2.0 * math.cos(phi1) + 1.0)
-            self.joint_angles[0] += phi_dot1 * dt
+        # 关节角度跟随头部角速度
+        # 当 omega1 > 0（左转）时，关节角度应该为正（身体向左弯）
+        # joint_angles[3] 是最靠近头部的关节（link_4->link_5）
+        # joint_angles[0] 是最靠近尾部的关节（base_link->link_2）
         
-        # 后续关节（简化处理）
-        for i in range(1, len(self.joint_angles)):
-            # 简化的跟随模型
-            if i > 0:
-                prev_phi = self.joint_angles[i-1]
-                # 后续关节跟随前一个关节
-                self.joint_angles[i] = 0.9 * self.joint_angles[i] + 0.1 * prev_phi * 0.5
+        # 头部附近的关节响应更快，尾部关节响应更慢
+        gain = [0.3, 0.4, 0.5, 0.6]  # 从尾部到头部，增益递增
+        
+        for i in range(len(self.joint_angles)):
+            # 目标角度与角速度成正比
+            target_angle = omega1 * gain[i] * 2.0
+            # 平滑过渡到目标角度
+            self.joint_angles[i] = 0.9 * self.joint_angles[i] + 0.1 * target_angle
+            # 限制关节角度范围
+            self.joint_angles[i] = max(-0.5, min(0.5, self.joint_angles[i]))
 
+    def compute_base_from_head(self, head_x, head_y, head_theta):
+        """
+        从头部（link_5）位置反推 base_link 的位置和朝向
+        使用逆向运动学：从 link_5 沿着关节链反向计算到 base_link
+        """
+        L = 0.18  # 段长度
+        
+        # 从 link_5 开始，反向遍历
+        x = head_x
+        y = head_y
+        theta = head_theta
+        
+        # 反向遍历关节（从 link_5 到 base_link）
+        # joint_angles[3] 是 link_4->link_5 的关节
+        # joint_angles[0] 是 base_link->link_2 的关节
+        for i in range(len(self.joint_angles) - 1, -1, -1):
+            phi = self.joint_angles[i]
+            # 先反向旋转关节角度
+            theta -= phi
+            # 然后反向移动一个段长度
+            x -= L * math.cos(theta)
+            y -= L * math.sin(theta)
+        
+        return x, y, theta
+    
     def publish_tf_and_path(self, v1, omega1):
-        """积分前段位姿，发布 odom->base_link TF 与头部轨迹线"""
+        """
+        积分头部位姿，发布 odom->base_link TF 与头部轨迹线
+        
+        策略：
+        1. 直接积分头部（link_5）的位置和朝向
+        2. 从头部位置反推 base_link 的位置
+        3. 绿色轨迹直接使用头部位置
+        """
         dt = self.dt
-        # 2D 位姿积分
+        
+        # 2D 位姿积分（头部 link_5 的位姿）
         self.x += v1 * math.cos(self.theta) * dt
         self.y += v1 * math.sin(self.theta) * dt
         self.theta += omega1 * dt
 
-        # TF
+        # 从头部位置反推 base_link 的位置和朝向
+        base_x, base_y, base_theta = self.compute_base_from_head(
+            self.x, self.y, self.theta
+        )
+
+        now = self.get_clock().now().to_msg()
+        
+        # TF: world -> odom（静态变换，world 和 odom 重合）
+        t_world = TransformStamped()
+        t_world.header.stamp = now
+        t_world.header.frame_id = 'world'
+        t_world.child_frame_id = 'odom'
+        t_world.transform.translation.x = 0.0
+        t_world.transform.translation.y = 0.0
+        t_world.transform.translation.z = 0.0
+        t_world.transform.rotation.x = 0.0
+        t_world.transform.rotation.y = 0.0
+        t_world.transform.rotation.z = 0.0
+        t_world.transform.rotation.w = 1.0
+        
+        # TF: odom -> base_link（使用反推的位置和朝向）
         t = TransformStamped()
-        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.stamp = now
         t.header.frame_id = 'odom'
         t.child_frame_id = 'base_link'
-        t.transform.translation.x = self.x
-        t.transform.translation.y = self.y
+        t.transform.translation.x = base_x
+        t.transform.translation.y = base_y
         t.transform.translation.z = 0.0
-        qz = math.sin(self.theta * 0.5)
-        qw = math.cos(self.theta * 0.5)
-        t.transform.rotation.z = qz
-        t.transform.rotation.w = qw
-        self.tf_broadcaster.sendTransform(t)
+        
+        # 绕 Z 轴旋转（base_link 的朝向）
+        t.transform.rotation.x = 0.0
+        t.transform.rotation.y = 0.0
+        t.transform.rotation.z = math.sin(base_theta / 2)
+        t.transform.rotation.w = math.cos(base_theta / 2)
+        
+        # 发布两个 TF
+        self.tf_broadcaster.sendTransform([t_world, t])
 
-        # 路径 Marker（LINE_STRIP）
+        # 路径 Marker（LINE_STRIP）- 直接使用头部位置
         p = Point()
         p.x = self.x
         p.y = self.y
@@ -172,7 +218,7 @@ class HeadTrackingVerifier(Node):
         self.path_points.append(p)
 
         marker = Marker()
-        marker.header.stamp = t.header.stamp
+        marker.header.stamp = now
         marker.header.frame_id = 'odom'
         marker.ns = 'head_path'
         marker.id = 0
@@ -212,8 +258,8 @@ class HeadTrackingVerifier(Node):
                 self.publish_velocity_command(v1, omega1)
             self.update_joint_angles(v1, omega1)
         
-        # 场景 3: S形轨迹 (25-40秒)
-        elif t < 40.0:
+        # 场景 3: S形轨迹 (25-55秒) - 延长到30秒
+        elif t < 55.0:
             v1 = 0.1
             omega1 = 0.12 * math.sin(0.3 * (t - 25.0))  # 正弦变化的角速度
             if int(t * 10) % 50 == 0:
@@ -222,7 +268,7 @@ class HeadTrackingVerifier(Node):
                 self.publish_velocity_command(v1, omega1)
             self.update_joint_angles(v1, omega1)
         
-        # 场景 4: 停止 (40秒后)
+        # 场景 4: 停止 (55秒后)
         else:
             v1 = 0.0
             omega1 = 0.0
@@ -251,12 +297,12 @@ def main():
     verifier = HeadTrackingVerifier()
     
     try:
-        # 运行45秒
+        # 运行60秒
         import threading
         stop_event = threading.Event()
         
         def stop_after_timeout():
-            time.sleep(45.0)
+            time.sleep(60.0)
             stop_event.set()
         
         timeout_thread = threading.Thread(target=stop_after_timeout)
