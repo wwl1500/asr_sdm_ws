@@ -1,0 +1,351 @@
+<?xml version="1.0"?>
+<!--
+  水平面蛇形机器人 URDF 模型
+  - 5个body link在水平面（XY平面）上排列
+  - link_5作为头部单元，接收速度命令
+  - 关节为绕Z轴旋转的偏航关节（yaw joints）
+  - 段长度：0.18m
+-->
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="horizontal_snakerobot_description">
+<!--................................. 定义 ...................................-->
+  <xacro:property name="robot_parts_path" value="package://asr_sdm_description/meshes" />
+  <xacro:property name="segment_length" value="0.18" />
+  
+  <!-- 材质定义 -->
+  <material name="body_grey">
+    <color rgba="0.7 0.7 0.7 1.0"/>
+  </material>
+  
+  <material name="head_red">
+    <color rgba="1.0 0.3 0.3 1.0"/>
+  </material>
+  
+  <material name="propeller_dark">
+    <color rgba="0.3 0.3 0.3 0.8"/>
+  </material>
+
+<!---............................. Link 定义 ................................-->
+  <!-- 固定世界坐标系 -->
+  <link name="world"/>
+
+  <!-- base_link: 尾部单元 -->
+  <link name="base_link">
+    <inertial>
+      <mass value="4" />
+      <inertia ixx="0.2"  ixy="0"  ixz="0" iyy="0.2" iyz="0" izz="0.2" />
+    </inertial>
+    <visual>
+      <!-- 旋转网格使其水平躺在 XY 平面：绕 Y 轴旋转 90 度 -->
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <mesh filename="${robot_parts_path}/body_2links.dae"/>
+      </geometry>
+      <material name="body_grey"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.18"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <!-- base_link 的螺旋桨 -->
+  <link name="propeller_base_left">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <link name="propeller_base_right">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 -0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <joint name="base_to_prop_left" type="fixed">
+    <parent link="base_link"/>
+    <child link="propeller_base_left"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <joint name="base_to_prop_right" type="fixed">
+    <parent link="base_link"/>
+    <child link="propeller_base_right"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- link_2 -->
+  <link name="link_2">
+    <inertial>
+      <mass value="4" />
+      <inertia ixx="0.2"  ixy="0"  ixz="0" iyy="0.2" iyz="0" izz="0.2" />
+    </inertial>
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <mesh filename="${robot_parts_path}/body_2links.dae"/>
+      </geometry>
+      <material name="body_grey"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.18"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <!-- link_2 的螺旋桨 -->
+  <link name="propeller_2_left">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <link name="propeller_2_right">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 -0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <joint name="link_2_to_prop_left" type="fixed">
+    <parent link="link_2"/>
+    <child link="propeller_2_left"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <joint name="link_2_to_prop_right" type="fixed">
+    <parent link="link_2"/>
+    <child link="propeller_2_right"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- link_3 -->
+  <link name="link_3">
+    <inertial>
+      <mass value="4" />
+      <inertia ixx="0.2"  ixy="0"  ixz="0" iyy="0.2" iyz="0" izz="0.2" />
+    </inertial>
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <mesh filename="${robot_parts_path}/body_2links.dae"/>
+      </geometry>
+      <material name="body_grey"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.18"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <!-- link_3 的螺旋桨 -->
+  <link name="propeller_3_left">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <link name="propeller_3_right">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 -0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <joint name="link_3_to_prop_left" type="fixed">
+    <parent link="link_3"/>
+    <child link="propeller_3_left"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <joint name="link_3_to_prop_right" type="fixed">
+    <parent link="link_3"/>
+    <child link="propeller_3_right"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- link_4 -->
+  <link name="link_4">
+    <inertial>
+      <mass value="4" />
+      <inertia ixx="0.2"  ixy="0"  ixz="0" iyy="0.2" iyz="0" izz="0.2" />
+    </inertial>
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <mesh filename="${robot_parts_path}/body_2links.dae"/>
+      </geometry>
+      <material name="body_grey"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.18"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <!-- link_4 的螺旋桨 -->
+  <link name="propeller_4_left">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <link name="propeller_4_right">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 -0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <joint name="link_4_to_prop_left" type="fixed">
+    <parent link="link_4"/>
+    <child link="propeller_4_left"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <joint name="link_4_to_prop_right" type="fixed">
+    <parent link="link_4"/>
+    <child link="propeller_4_right"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- link_5: 头部单元 - 红色标识 -->
+  <link name="link_5">
+    <inertial>
+      <mass value="4" />
+      <inertia ixx="0.2"  ixy="0"  ixz="0" iyy="0.2" iyz="0" izz="0.2" />
+    </inertial>
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <mesh filename="${robot_parts_path}/body_2links.dae"/>
+      </geometry>
+      <material name="head_red"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.18"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <!-- link_5 的螺旋桨 -->
+  <link name="propeller_head_left">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <link name="propeller_head_right">
+    <visual>
+      <origin rpy="0 ${pi/2} 0" xyz="0.0 -0.05 0.0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.01"/>
+      </geometry>
+      <material name="propeller_dark"/>
+    </visual>
+  </link>
+  
+  <joint name="head_to_prop_left" type="fixed">
+    <parent link="link_5"/>
+    <child link="propeller_head_left"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <joint name="head_to_prop_right" type="fixed">
+    <parent link="link_5"/>
+    <child link="propeller_head_right"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+<!--.............................关节定义.....................................-->
+  <!-- 固定关节：world -> base_link -->
+  <joint name="world_to_base_link" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+  </joint>
+
+  <!-- 偏航关节：base_link -> link_2 (绕Z轴旋转，沿X轴平移) -->
+  <joint name="base_link_to_link_2" type="continuous">
+    <parent link="base_link"/>
+    <child link="link_2"/>
+    <origin rpy="0 0 0" xyz="${segment_length} 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="100.0" lower="-1.57" upper="1.57" velocity="10.0"/>
+    <safety_controller k_velocity="20" k_position="20"/>
+  </joint>
+
+  <!-- 偏航关节：link_2 -> link_3 -->
+  <joint name="link_2_to_link_3" type="continuous">
+    <parent link="link_2"/>
+    <child link="link_3"/>
+    <origin rpy="0 0 0" xyz="${segment_length} 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="100.0" lower="-1.57" upper="1.57" velocity="10.0"/>
+    <safety_controller k_velocity="20" k_position="20"/>
+  </joint>
+
+  <!-- 偏航关节：link_3 -> link_4 -->
+  <joint name="link_3_to_link_4" type="continuous">
+    <parent link="link_3"/>
+    <child link="link_4"/>
+    <origin rpy="0 0 0" xyz="${segment_length} 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="100.0" lower="-1.57" upper="1.57" velocity="10.0"/>
+    <safety_controller k_velocity="20" k_position="20"/>
+  </joint>
+
+  <!-- 偏航关节：link_4 -> link_5 (头部) -->
+  <joint name="link_4_to_link_5" type="continuous">
+    <parent link="link_4"/>
+    <child link="link_5"/>
+    <origin rpy="0 0 0" xyz="${segment_length} 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="100.0" lower="-1.57" upper="1.57" velocity="10.0"/>
+    <safety_controller k_velocity="20" k_position="20"/>
+  </joint>
+
+</robot>
