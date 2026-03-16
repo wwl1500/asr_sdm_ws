@@ -103,6 +103,59 @@ Install the official glog library. This is used instead of the `glog_vendor` pac
 sudo apt-get update && sudo apt-get install -y libgoogle-glog-dev
 ```
 
+## Repository Structure
+
+```
+asr_sdm_ws/
+├── src/
+│   ├── asr_sdm_launch/          # Launch files and configurations
+│   │   ├── config/
+│   │   └── launch/
+│   ├── asr_sdm_msgs/            # Custom ROS2 message definitions
+│   │   ├── asr_sdm_control_msgs/
+│   │   ├── asr_sdm_hardware_msgs/
+│   │   ├── asr_sdm_vio_msgs/
+│   │   └── ...
+│   ├── asr_sdm_sensors/         # Sensor driver packages
+│   │   ├── asr_sdm_camera_realsense_d405/
+│   │   ├── asr_sdm_imu_hiwonder_10axis/
+│   │   └── asr_sdm_imu_wheeltec_n100/
+│   └── asr_sdm_universe/        # Core robot software
+│       ├── common/              # Shared libraries (geometry, data structures)
+│       ├── control/             # Controllers and dynamic models
+│       ├── perception/          # Vision and odometry
+│       └── robot/               # Hardware interface, description, teleop
+├── datasheet/                   # Hardware datasheets
+├── block_diagram.drawio.svg
+├── board_pin_map.drawio.svg
+├── comm_protocol.md
+└── README.md
+```
+
+### How to reference folders and files
+
+In GitHub issues, pull requests, and Markdown files, use the following conventions to reference folders and files in this repository:
+
+**Inline code** — wrap a path in backticks to display it as a fixed-width path:
+```
+`src/asr_sdm_launch/launch/`
+`src/asr_sdm_universe/control/asr_sdm_controller/`
+```
+
+**Markdown hyperlink** — link directly to a file or folder on GitHub:
+```markdown
+[asr_sdm_controller](src/asr_sdm_universe/control/asr_sdm_controller/)
+[interface_launch.py](src/asr_sdm_launch/launch/interface_launch.py)
+```
+
+**Absolute GitHub URL** — use the full URL when linking from outside this repository (replace `<branch>` with your branch name, e.g. `main`):
+```
+https://github.com/wwl1500/asr_sdm_ws/tree/<branch>/src/asr_sdm_universe/control/
+https://github.com/wwl1500/asr_sdm_ws/blob/<branch>/src/asr_sdm_launch/launch/interface_launch.py
+```
+
+> **Tip:** Use `tree/` in the URL to link to a **folder**, and `blob/` to link to a **file**.
+
 ## ROS
 
 ### Source code compilation
