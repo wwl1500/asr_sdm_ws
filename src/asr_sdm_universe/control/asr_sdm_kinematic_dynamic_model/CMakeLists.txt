@@ -20,20 +20,15 @@ add_executable(pinocchio_dynamics_node
   src/pinocchio_dynamics_node.cpp
 )
 
-target_include_directories(pinocchio_dynamics_node
-  PRIVATE
-    ${EIGEN3_INCLUDE_DIRS}
-)
-
 target_link_libraries(pinocchio_dynamics_node
   PRIVATE
     ament_index_cpp::ament_index_cpp
     pinocchio::pinocchio
-    rclcpp::rclcpp
     Eigen3::Eigen
-    ${geometry_msgs_LIBRARIES}
-    ${sensor_msgs_LIBRARIES}
-    ${std_msgs_LIBRARIES}
+    ${rclcpp_TARGETS}
+    ${geometry_msgs_TARGETS}
+    ${sensor_msgs_TARGETS}
+    ${std_msgs_TARGETS}
 )
 
 install(
