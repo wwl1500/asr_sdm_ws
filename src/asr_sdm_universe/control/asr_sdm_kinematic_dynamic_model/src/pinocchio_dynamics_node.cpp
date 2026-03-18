@@ -1,20 +1,7 @@
 // Copyright (c) 2025.
-// ROS 2 node implementing rigid-body Newton–Euler dynamics using Pinocchio.
-//
-// Implements the formulas from "Dynamics Modeling of Underwater Multibody
-// Robots — Detailed Newton–Euler Derivations" (without fluid forces):
-//
-//   M_RB(q) * ddq + C_RB(q, dq) * dq + g(q) = tau
-//
-// Pinocchio API mapping to document equations:
-//   Eq. (14)    M_RB(q) = sum_i J_i^T I_i J_i        -> pinocchio::crba()
-//   Eqs.(28-34) C_RB(q,dq)*dq + g(q)                 -> pinocchio::nonLinearEffects()
-//   Eq. (44)    g_g(q) gravity vector                  -> pinocchio::computeGeneralizedGravity()
-//   Eqs.(28-34) C_RB(q,dq) Coriolis matrix            -> pinocchio::computeCoriolisMatrix()
-//   Sec.2.7     tau = M*ddq + C*dq + g (N-E recursion)-> pinocchio::rnea()
-//   Eqs.(2-3)   J_i(q) geometric Jacobians            -> pinocchio::computeJointJacobians()
-//   Eqs.(1,8-9) Forward kinematics (pos/vel/acc)      -> pinocchio::forwardKinematics()
-//               Center of mass                         -> pinocchio::centerOfMass()
+// 使用 Pinocchio 实现刚体牛顿-欧拉动力学的 ROS 2 节点。
+// 核心方程：tau = M(q) * ddq + C(q, dq) * dq + g(q)。
+// 节点从 /joint_states 接收 (q, v)，周期发布 M、C、g、nle、tau、J、连杆状态与质心。
 
 #include <chrono>
 #include <fstream>
@@ -31,15 +18,15 @@
 
 #include <Eigen/Dense>
 
-// Pinocchio headers — each maps to a specific set of document equations.
-#include <pinocchio/algorithm/center-of-mass.hpp>     // CoM computation
-#include <pinocchio/algorithm/compute-all-terms.hpp>   // Efficient combined computation
-#include <pinocchio/algorithm/crba.hpp>                // Eq.(14): M_RB via CRBA
-#include <pinocchio/algorithm/frames.hpp>              // Frame placement & Jacobians
-#include <pinocchio/algorithm/jacobian.hpp>            // Eqs.(2-3): Geometric Jacobians
-#include <pinocchio/algorithm/joint-configuration.hpp> // Neutral config, integration
-#include <pinocchio/algorithm/kinematics.hpp>          // Eqs.(1,8-9): FK
-#include <pinocchio/algorithm/rnea.hpp>                // Sec.2.7 + Eqs.(28-34,44): RNEA, C, g
+// Pinocchio 算法接口。
+#include <pinocchio/algorithm/center-of-mass.hpp>
+#include <pinocchio/algorithm/compute-all-terms.hpp>
+#include <pinocchio/algorithm/crba.hpp>
+#include <pinocchio/algorithm/frames.hpp>
+#include <pinocchio/algorithm/jacobian.hpp>
+#include <pinocchio/algorithm/joint-configuration.hpp>
+#include <pinocchio/algorithm/kinematics.hpp>
+#include <pinocchio/algorithm/rnea.hpp>
 #include <pinocchio/multibody/joint/joint-free-flyer.hpp>
 #include <pinocchio/multibody/model.hpp>
 #include <pinocchio/parsers/urdf.hpp>
@@ -47,7 +34,9 @@
 namespace asr_sdm_kinematic_dynamic_model
 {
 
-/// Helper: pack an Eigen matrix (row-major) into Float64MultiArray with layout.
+/// 将 Eigen 矩阵按行展平为 Float64MultiArray，并写入二维 layout。
+/// 输入：任意 m x n 矩阵。
+/// 输出：data 长度为 m*n，layout.dim 分别表示行与列。
 static std_msgs::msg::Float64MultiArray eigen_to_multiarray(
   const Eigen::MatrixXd & mat, const std::string & row_label = "rows",
   const std::string & col_label = "cols")
@@ -69,7 +58,9 @@ static std_msgs::msg::Float64MultiArray eigen_to_multiarray(
   return msg;
 }
 
-/// Helper: pack an Eigen vector into Float64MultiArray.
+/// 将 Eigen 向量转换为一维 Float64MultiArray。
+/// 输入：长度为 n 的向量。
+/// 输出：layout.dim[0].size = n，data 顺序与 Eigen 向量一致。
 static std_msgs::msg::Float64MultiArray eigen_to_multiarray(
   const Eigen::VectorXd & vec, const std::string & label = "dim")
 {
@@ -82,30 +73,13 @@ static std_msgs::msg::Float64MultiArray eigen_to_multiarray(
   return msg;
 }
 
-// ---------------------------------------------------------------------------
-// PinocchioDynamicsNode
-// ---------------------------------------------------------------------------
-// Computes and publishes all terms of the rigid-body dynamic equation:
-//   M_RB(q) * ddq  +  C_RB(q,dq) * dq  +  g(q)  =  tau
-//
-// Published topics:
-//   pinocchio/mass_matrix        — M_RB(q)                    [Eq.(14)]
-//   pinocchio/coriolis_matrix    — C_RB(q,dq)                 [Eqs.(28-34)]
-//   pinocchio/gravity_vector     — g(q)                       [Eq.(44)]
-//   pinocchio/nonlinear_effects  — C_RB*dq + g  (= nle)      [Eqs.(28-34)+(44)]
-//   pinocchio/inverse_dynamics   — tau = M*ddq + C*dq + g     [Sec.2.7 RNEA]
-//   pinocchio/center_of_mass     — CoM position
-//   pinocchio/total_mass         — total robot mass
-//   pinocchio/joint_jacobians    — stacked geometric Jacobians [Eqs.(2-3)]
-//   pinocchio/link_positions     — link centroid positions (oMi)
-//   pinocchio/link_velocities    — link spatial velocities
-// ---------------------------------------------------------------------------
+/// 动力学计算节点：加载 URDF 后周期计算并发布 Pinocchio 动力学/运动学结果。
 class PinocchioDynamicsNode : public rclcpp::Node
 {
 public:
+  /// 构造函数：声明参数、加载模型、初始化状态并创建 ROS 接口。
   PinocchioDynamicsNode() : Node("pinocchio_dynamics_node")
   {
-    // ----- Parameters -----
     declare_parameter<std::string>("robot_description_path", "");
     declare_parameter<std::string>("robot_description_package", "asr_sdm_description");
     declare_parameter<std::string>("robot_description_file", "urdf/underwater_snakerobot.urdf");
@@ -119,7 +93,6 @@ public:
       throw std::runtime_error("Failed to create Pinocchio model.");
     }
 
-    // Desired acceleration for inverse dynamics (default: zero).
     a_ = Eigen::VectorXd::Zero(model_->nv);
 
     create_publishers();
@@ -128,9 +101,8 @@ public:
   }
 
 private:
-  // -----------------------------------------------------------------------
-  // Model loading
-  // -----------------------------------------------------------------------
+  /// 加载 URDF 并构建 Pinocchio 模型与数据缓存。
+  /// 流程：解析参数 -> 解析路径 -> buildModel -> 初始化 q_/v_ -> 可选打印模型摘要。
   void load_robot_model()
   {
     const auto explicit_path  = get_parameter("robot_description_path").as_string();
@@ -159,7 +131,6 @@ private:
     model_ = std::make_shared<pinocchio::Model>();
     try {
       if (use_free_flyer) {
-        // Free-flyer base provides 6 DOF for the base body in Eqs.(1)-(3).
         pinocchio::urdf::buildModel(resolved_urdf, pinocchio::JointModelFreeFlyer(), *model_);
       } else {
         pinocchio::urdf::buildModel(resolved_urdf, *model_);
@@ -172,11 +143,9 @@ private:
 
     data_ = std::make_shared<pinocchio::Data>(*model_);
 
-    // Neutral configuration and zero velocity as defaults.
     q_ = pinocchio::neutral(*model_);
     v_ = Eigen::VectorXd::Zero(model_->nv);
 
-    // Optionally seed with user-specified initial joint positions.
     std::vector<double> init_pos;
     get_parameter("initial_joint_positions", init_pos);
     if (!init_pos.empty()) {
@@ -199,60 +168,47 @@ private:
         static_cast<int>(model_->njoints),
         model_->nframes);
 
-      // Log joint names for debugging.
       for (int j = 0; j < static_cast<int>(model_->njoints); ++j) {
         RCLCPP_INFO(get_logger(), "  joint[%d]: %s", j, model_->names[j].c_str());
       }
     }
   }
 
-  // -----------------------------------------------------------------------
-  // Publishers
-  // -----------------------------------------------------------------------
+  /// 创建所有发布器。
+  /// 话题包含：M、C、g、nle、tau、质心、总质量、堆叠雅可比、连杆位置和连杆速度。
   void create_publishers()
   {
-    // M_RB(q) — Eq.(14): rigid-body inertia matrix via CRBA
     mass_matrix_pub_ =
       create_publisher<std_msgs::msg::Float64MultiArray>("pinocchio/mass_matrix", 10);
 
-    // C_RB(q,dq) — Eqs.(28-34): Coriolis-centripetal matrix
     coriolis_matrix_pub_ =
       create_publisher<std_msgs::msg::Float64MultiArray>("pinocchio/coriolis_matrix", 10);
 
-    // g(q) — Eq.(44): generalized gravitational force
     gravity_vector_pub_ =
       create_publisher<std_msgs::msg::Float64MultiArray>("pinocchio/gravity_vector", 10);
 
-    // C_RB(q,dq)*dq + g(q) — combined nonlinear effects
     nle_pub_ =
       create_publisher<std_msgs::msg::Float64MultiArray>("pinocchio/nonlinear_effects", 10);
 
-    // tau = M*ddq + C*dq + g — full inverse dynamics via RNEA (Sec.2.7)
     inverse_dynamics_pub_ =
       create_publisher<std_msgs::msg::Float64MultiArray>("pinocchio/inverse_dynamics", 10);
 
-    // Center of mass position
     com_pub_ =
       create_publisher<geometry_msgs::msg::Vector3>("pinocchio/center_of_mass", 10);
 
-    // Total mass
     total_mass_pub_ =
       create_publisher<std_msgs::msg::Float64>("pinocchio/total_mass", 10);
 
-    // Stacked geometric Jacobians — Eqs.(2-3)
     jacobians_pub_ =
       create_publisher<std_msgs::msg::Float64MultiArray>("pinocchio/joint_jacobians", 10);
 
-    // Link centroid positions & velocities — Eqs.(1,8-9)
     link_positions_pub_ =
       create_publisher<std_msgs::msg::Float64MultiArray>("pinocchio/link_positions", 10);
     link_velocities_pub_ =
       create_publisher<std_msgs::msg::Float64MultiArray>("pinocchio/link_velocities", 10);
   }
 
-  // -----------------------------------------------------------------------
-  // Subscriber — /joint_states updates q and v
-  // -----------------------------------------------------------------------
+  /// 创建订阅器：从 /joint_states 接收状态并更新 q_/v_。
   void create_subscribers()
   {
     joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
@@ -260,11 +216,12 @@ private:
       std::bind(&PinocchioDynamicsNode::joint_state_callback, this, std::placeholders::_1));
   }
 
+  /// 处理 JointState：按关节名映射更新模型状态。
+  /// 当前仅写入标量关节（nq==1 且 nv==1），多自由度关节保持原值。
   void joint_state_callback(const sensor_msgs::msg::JointState::SharedPtr msg)
   {
     if (!model_) return;
 
-    // Build a name → index map for the Pinocchio model on first call.
     if (joint_name_to_model_idx_.empty()) {
       for (int j = 1; j < static_cast<int>(model_->njoints); ++j) {
         joint_name_to_model_idx_[model_->names[j]] = j;
@@ -281,20 +238,16 @@ private:
       const int nq_j     = model_->joints[joint_id].nq();
       const int nv_j     = model_->joints[joint_id].nv();
 
-      // Position
       if (k < msg->position.size() && nq_j == 1 && q_idx < q_.size()) {
         q_[q_idx] = msg->position[k];
       }
-      // Velocity
       if (k < msg->velocity.size() && nv_j == 1 && v_idx < v_.size()) {
         v_[v_idx] = msg->velocity[k];
       }
     }
   }
 
-  // -----------------------------------------------------------------------
-  // Timer
-  // -----------------------------------------------------------------------
+  /// 配置周期定时器，驱动动力学计算与发布。
   void configure_timer()
   {
     const int period_ms = get_parameter("publish_period_ms").as_int();
@@ -303,9 +256,8 @@ private:
       std::bind(&PinocchioDynamicsNode::publish_dynamics, this));
   }
 
-  // -----------------------------------------------------------------------
-  // Main computation & publishing loop
-  // -----------------------------------------------------------------------
+  /// 主循环：基于当前 q_/v_/a_ 计算并发布动力学与运动学结果。
+  /// 计算顺序：前向运动学 -> M -> nle -> g -> C -> tau -> J -> 连杆状态 -> CoM -> 总质量。
   void publish_dynamics()
   {
     if (!model_ || !data_) {
@@ -314,83 +266,27 @@ private:
       return;
     }
 
-    // ==================================================================
-    // 1. Forward Kinematics — Eqs.(1, 8-9)
-    //    Propagates position, velocity, acceleration through all links
-    //    using the Newton–Euler recursive forward pass (Sec.2.7).
-    // ==================================================================
     pinocchio::forwardKinematics(*model_, *data_, q_, v_, a_);
 
-    // ==================================================================
-    // 2. Mass Matrix M_RB(q) — Eq.(14)
-    //    M_RB = sum_i J_i^T I_i J_i
-    //    CRBA is the Composite Rigid-Body Algorithm that efficiently
-    //    computes this sum via a backward recursion.
-    // ==================================================================
     pinocchio::crba(*model_, *data_, q_);
-    // CRBA only fills the upper triangle; mirror for symmetry.
     data_->M.triangularView<Eigen::StrictlyLower>() = data_->M.transpose();
-
     mass_matrix_pub_->publish(eigen_to_multiarray(data_->M));
 
-    // ==================================================================
-    // 3. Nonlinear Effects: C_RB(q,dq)*dq + g(q) — Eqs.(28-34) + (44)
-    //    This is the bias term: what RNEA returns when ddq = 0.
-    //    Physically it collects:
-    //      - Coriolis / centripetal forces (omega_i × J_i omega_i)
-    //      - Gravitational generalized force
-    // ==================================================================
     pinocchio::nonLinearEffects(*model_, *data_, q_, v_);
-
     nle_pub_->publish(eigen_to_multiarray(data_->nle, "nle"));
 
-    // ==================================================================
-    // 4. Gravity Vector g(q) — Eq.(44)
-    //    g_g(q) = sum_i J_i^T [ R_b^i [0,0,-m_i g]^T ; ... ]
-    // ==================================================================
     pinocchio::computeGeneralizedGravity(*model_, *data_, q_);
-
     gravity_vector_pub_->publish(eigen_to_multiarray(data_->g, "gravity"));
 
-    // ==================================================================
-    // 5. Coriolis Matrix C_RB(q,dq) — Eqs.(28-34)
-    //    Constructed so that (Mdot - 2C) is skew-symmetric (Eq.31).
-    //    Uses Christoffel symbols: C_ij = sum_k Gamma_ijk dq_k  (Eq.29)
-    // ==================================================================
     pinocchio::computeCoriolisMatrix(*model_, *data_, q_, v_);
-
     coriolis_matrix_pub_->publish(eigen_to_multiarray(data_->C));
 
-    // ==================================================================
-    // 6. Inverse Dynamics via RNEA — Sec.2.7 (Newton–Euler Recursive)
-    //    tau = M(q)*ddq + C(q,dq)*dq + g(q)
-    //
-    //    The RNEA performs:
-    //      Forward pass (i = 0..n):
-    //        omega_{i+1} = R^T omega_i + dtheta z    [angular vel propagation]
-    //        domega_{i+1} = ...                       [angular accel propagation]
-    //        a_{c,i+1} = ...                          [linear accel, Eq. in Sec.2]
-    //        F_i = m_i a_{c,i}                        [Newton, Eq.(Newton)]
-    //        N_i = I_i domega_i + omega_i × I_i omega_i [Euler, Eq.(Euler)]
-    //      Backward pass (i = n..0):
-    //        f_i = R f_{i+1} + F_i                    [force transmission]
-    //        n_i = N_i + R n_{i+1} + ...              [moment transmission]
-    //        tau_i = n_i^T z_i                         [joint torque extraction]
-    // ==================================================================
     const Eigen::VectorXd tau = pinocchio::rnea(*model_, *data_, q_, v_, a_);
-
     inverse_dynamics_pub_->publish(eigen_to_multiarray(tau, "tau"));
 
-    // ==================================================================
-    // 7. Geometric Jacobians — Eqs.(2-3)
-    //    J_i = [ J_{i,b}  J_{i,theta} ]
-    //    Each column j: [ z_j × p_{i/j} ; z_j ] (revolute)
-    // ==================================================================
     pinocchio::computeJointJacobians(*model_, *data_, q_);
-
     {
-      // Stack all joint Jacobians into a single (njoints-1)*6 × nv matrix.
-      const int n_active_joints = model_->njoints - 1;  // exclude "universe"
+      const int n_active_joints = model_->njoints - 1;
       Eigen::MatrixXd J_stacked(6 * n_active_joints, model_->nv);
       J_stacked.setZero();
       for (int j = 1; j < model_->njoints; ++j) {
@@ -403,16 +299,9 @@ private:
       jacobians_pub_->publish(eigen_to_multiarray(J_stacked, "J_rows", "J_cols"));
     }
 
-    // ==================================================================
-    // 8. Link Positions & Velocities — Forward kinematics results
-    //    data_.oMi[j].translation() = position of joint j origin in world
-    //    data_.v[j]                 = spatial velocity of joint j
-    // ==================================================================
     {
       const int n_active_joints = model_->njoints - 1;
-      // Positions: (n_active_joints × 3)
       Eigen::MatrixXd positions(n_active_joints, 3);
-      // Velocities: (n_active_joints × 6) — [linear; angular]
       Eigen::MatrixXd velocities(n_active_joints, 6);
 
       for (int j = 1; j < model_->njoints; ++j) {
@@ -424,32 +313,20 @@ private:
       link_velocities_pub_->publish(eigen_to_multiarray(velocities, "links", "lin_ang"));
     }
 
-    // ==================================================================
-    // 9. Center of Mass
-    // ==================================================================
     const Eigen::Vector3d com = pinocchio::centerOfMass(*model_, *data_, q_, v_);
-
     geometry_msgs::msg::Vector3 com_msg;
     com_msg.x = com.x();
     com_msg.y = com.y();
     com_msg.z = com.z();
     com_pub_->publish(com_msg);
 
-    // ==================================================================
-    // 10. Total Mass
-    // ==================================================================
     const double total_mass = pinocchio::computeTotalMass(*model_, *data_);
-
     std_msgs::msg::Float64 mass_msg;
     mass_msg.data = total_mass;
     total_mass_pub_->publish(mass_msg);
   }
 
-  // -----------------------------------------------------------------------
-  // Member variables
-  // -----------------------------------------------------------------------
-
-  // Publishers
+  // 发布器
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr mass_matrix_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr coriolis_matrix_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr gravity_vector_pub_;
@@ -461,22 +338,22 @@ private:
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr link_positions_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr link_velocities_pub_;
 
-  // Subscriber
+  // 订阅器
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 
-  // Timer
+  // 定时器
   rclcpp::TimerBase::SharedPtr timer_;
 
-  // Pinocchio model & data
+  // Pinocchio 模型与运行时数据缓存。
   std::shared_ptr<pinocchio::Model> model_;
   std::shared_ptr<pinocchio::Data> data_;
 
-  // State vectors:  q ∈ R^nq (configuration),  v ∈ R^nv (velocity),  a ∈ R^nv (acceleration)
+  // 状态向量：q（构型）、v（速度）、a（加速度）。
   Eigen::VectorXd q_;
   Eigen::VectorXd v_;
-  Eigen::VectorXd a_;  // desired/commanded acceleration for inverse dynamics
+  Eigen::VectorXd a_;
 
-  // Joint name lookup (built lazily from first JointState message)
+  // 关节名到模型索引的映射（首次回调时懒加载）。
   std::unordered_map<std::string, int> joint_name_to_model_idx_;
 };
 
