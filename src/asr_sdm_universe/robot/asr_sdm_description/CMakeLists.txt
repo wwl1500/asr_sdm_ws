@@ -7,15 +7,8 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-
-# Install everything consumers need so package:// URLs resolve in install space.
-install(
-  DIRECTORY
-    meshes
-    urdf
-    launch
-  DESTINATION share/${PROJECT_NAME}
-)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
